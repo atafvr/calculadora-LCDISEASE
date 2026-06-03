@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Predicción del nivel de riesgo asociado al cáncer de pulmón</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="app-shell">
+    <div class="container py-5">
+      <div class="main-card">
+        <section class="hero-panel">
+          <div class="hero-copy">
+            <span class="eyebrow">Modelo predictivo · Calculadora</span>
+            <h1>Predicción del nivel de riesgo asociado al cáncer de pulmón</h1>
+            <p>
+              Seleccione la opción que mejor describa la situación del usuario en cada variable.
+              El sistema transforma internamente cada selección en el valor numérico requerido por el modelo.
+            </p>
+          </div>
+          <div class="hero-visual">
+            <img src="{{ url_for('static', filename=report_images['hero']) }}" alt="Ilustración referencial de pulmones" class="hero-image">
+          </div>
+        </section>
+
+        <div class="notice-box">
+          <strong>Nota:</strong> las descripciones son una guía orientativa para facilitar el uso del prototipo.
+          No constituyen una escala clínica validada ni reemplazan una evaluación médica.
+        </div>
+
+        <form id="prediction-form" class="row g-4 mt-2">
+          {% for feature in features %}
+          {% set safe_id = feature|replace(' ', '_') %}
+          {% set default_value = 4 if ranges[feature][1] >= 4 else ranges[feature][0] %}
+          <div class="col-md-6">
+            <div class="field-card h-100">
+              <div class="field-header field-header-largeicons">
+                <div class="field-icon-wrap field-icon-wrap-large">
+                  <img src="{{ url_for('static', filename=variable_images[feature]) }}" alt="{{ labels[feature] }}" class="field-icon field-icon-large">
+                </div>
+                <div>
+                  <label class="form-label mb-1" for="{{ safe_id }}">{{ labels[feature] }}</label>
+                  <div class="field-subtitle">{{ descriptions[feature] }}</div>
+                </div>
+              </div>
+
+              <div class="slider-control">
+                <div class="slider-topline">
+                  <span class="slider-caption">Valor seleccionado</span>
+                  <span class="slider-value-badge" id="badge-{{ safe_id }}">{{ default_value }}</span>
+                </div>
+
+                <input
+                  type="range"
+                  class="form-range risk-slider"
+                  id="{{ safe_id }}"
+                  name="{{ feature }}"
+                  min="{{ ranges[feature][0] }}"
+                  max="{{ ranges[feature][1] }}"
+                  step="1"
+                  value="{{ default_value }}"
+                  data-help-id="help-{{ safe_id }}"
+                  data-badge-id="badge-{{ safe_id }}"
+                  data-feature="{{ feature }}"
+                >
+
+                <div class="slider-ticks" style="grid-template-columns: repeat({{ options[feature]|length }}, 1fr);">
+                  {% for item in options[feature] %}
+                  <span>{{ item.value }}</span>
+                  {% endfor %}
+                </div>
+
+                <div class="form-text selected-help slider-current" id="help-{{ safe_id }}"></div>
+              </div>
+
+              <details class="scale-guide">
+                <summary>Ver guía de puntuación y ejemplos</summary>
+                <div class="table-responsive mt-3">
+                  <table class="table table-sm align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th>Valor</th>
+                        <th>Nivel</th>
+                        <th>Ejemplo orientativo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for item in options[feature] %}
+                      <tr>
+                        <td><span class="value-pill">{{ item.value }}</span></td>
+                        <td>{{ item.label }}</td>
+                        <td class="text-muted">{{ item.example }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+
+              {% if feature == "Obesity" %}
+              <div class="bmi-tool mt-3">
+                <div class="bmi-tool-header">
+                  <strong>Calculadora IMC orientativa</strong>
+                  <span>Opcional</span>
+                </div>
+                <p class="bmi-tool-text">
+                  Ingrese peso y talla para obtener una referencia aproximada y sugerir una puntuación para la variable obesidad.
+                </p>
+
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <label class="bmi-label" for="bmi-weight">Peso (kg)</label>
+                    <input type="number" class="form-control bmi-input" id="bmi-weight" min="1" step="0.1" placeholder="Ej. 72">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="bmi-label" for="bmi-height">Talla (cm)</label>
+                    <input type="number" class="form-control bmi-input" id="bmi-height" min="1" step="0.1" placeholder="Ej. 165">
+                  </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                  <button type="button" class="btn btn-outline-primary btn-sm" id="calculate-bmi">Calcular IMC</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="apply-bmi-suggestion">Usar sugerencia</button>
+                </div>
+
+                <div id="bmi-result" class="bmi-result d-none"></div>
+                <div class="bmi-note">
+                  El IMC es una medida de tamizaje y no reemplaza una evaluación clínica.
+                </div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+
+          <div class="col-12 d-flex flex-wrap gap-2 pt-1">
+            <button type="submit" class="btn btn-primary btn-main">Predecir</button>
+            <button type="reset" class="btn btn-outline-secondary btn-main">Limpiar</button>
+          </div>
+        </form>
+
+        <section id="result" class="result-area d-none">
+          <div class="result-banner">
+            <div>
+              <span class="section-kicker">Resultado</span>
+              <h2>Nivel de riesgo: <span id="risk-level" class="risk-chip"></span></h2>
+              <p id="note"></p>
+            </div>
+          </div>
+
+          <div class="content-grid">
+            <div class="panel-card values-panel">
+              <div class="panel-header panel-header-media">
+                <img src="{{ url_for('static', filename=report_images['summary']) }}" alt="Resumen" class="section-image">
+                <div>
+                  <span class="section-kicker">Entradas</span>
+                  <h3>Valores interpretados por el sistema</h3>
+                </div>
+              </div>
+              <div id="input-summary" class="row g-3"></div>
+            </div>
+
+            <div id="reportBox" class="panel-card report-panel d-none">
+              <div class="panel-header panel-header-media">
+                <img src="{{ url_for('static', filename=report_images['advice']) }}" alt="Reporte" class="section-image">
+                <div>
+                  <span class="section-kicker">Orientación</span>
+                  <h3>Reporte orientativo</h3>
+                </div>
+              </div>
+
+              <p id="generalMessage" class="report-message"></p>
+
+              <div class="report-subheader">
+                <img src="{{ url_for('static', filename=report_images['advice']) }}" alt="Recomendaciones" class="report-mini-image">
+                <h4>Recomendaciones específicas</h4>
+              </div>
+              <ul id="specificRecommendations" class="recommendation-list"></ul>
+
+              <div class="report-warning-box">
+                <img src="{{ url_for('static', filename=report_images['warning']) }}" alt="Advertencia" class="report-mini-image">
+                <div class="report-warning" id="reportWarning"></div>
+              </div>
+            </div>
+
+            <div class="panel-card probability-panel">
+              <div class="panel-header panel-header-media">
+                <img src="{{ url_for('static', filename=report_images['summary']) }}" alt="Probabilidades" class="section-image">
+                <div>
+                  <span class="section-kicker">Modelo</span>
+                  <h3>Probabilidades por clase</h3>
+                  <p>La clase con mayor probabilidad es tomada como predicción final. Esto no equivale a probabilidad clínica de tener cáncer.</p>
+                </div>
+              </div>
+              <div id="probabilities"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="error" class="d-none mt-4">
+          <div class="alert alert-danger mb-0"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const featureImages = {
+      {% for key, value in variable_images.items() %}
+      {{ key|tojson }}: {{ url_for('static', filename=value)|tojson }}{{ "," if not loop.last else "" }}
+      {% endfor %}
+    };
+
+    const sliderOptions = {
+      {% for feature in features %}
+      {{ feature|tojson }}: {
+        {% for item in options[feature] %}
+        {{ item.value }}: { label: {{ item.label|tojson }}, example: {{ item.example|tojson }} }{{ "," if not loop.last else "" }}
+        {% endfor %}
+      }{{ "," if not loop.last else "" }}
+      {% endfor %}
+    };
+
+    const form = document.getElementById('prediction-form');
+    const resultBox = document.getElementById('result');
+    const errorBox = document.getElementById('error');
+    const riskLevel = document.getElementById('risk-level');
+    const probabilities = document.getElementById('probabilities');
+    const inputSummary = document.getElementById('input-summary');
+    const note = document.getElementById('note');
+    const reportBox = document.getElementById('reportBox');
+    const generalMessage = document.getElementById('generalMessage');
+    const specificRecommendations = document.getElementById('specificRecommendations');
+    const reportWarning = document.getElementById('reportWarning');
+    const bmiWeight = document.getElementById('bmi-weight');
+    const bmiHeight = document.getElementById('bmi-height');
+    const calculateBmiButton = document.getElementById('calculate-bmi');
+    const applyBmiButton = document.getElementById('apply-bmi-suggestion');
+    const bmiResult = document.getElementById('bmi-result');
+    let suggestedObesityValue = null;
+
+    function updateSliderDisplay(slider) {
+      const feature = slider.dataset.feature;
+      const help = document.getElementById(slider.dataset.helpId);
+      const badge = document.getElementById(slider.dataset.badgeId);
+      const value = slider.value;
+      const option = sliderOptions[feature][value];
+      badge.textContent = value;
+      help.innerHTML = `<strong>${value} - ${option.label}</strong><br><span>${option.example}</span>`;
+    }
+
+    function limpiarResultado() {
+      resultBox.classList.add('d-none');
+      errorBox.classList.add('d-none');
+      probabilities.innerHTML = '';
+      inputSummary.innerHTML = '';
+      riskLevel.textContent = '';
+      riskLevel.className = 'risk-chip';
+      note.textContent = '';
+      reportBox.classList.add('d-none');
+      generalMessage.textContent = '';
+      specificRecommendations.innerHTML = '';
+      reportWarning.textContent = '';
+      if (bmiResult) {
+        bmiResult.classList.add('d-none');
+        bmiResult.innerHTML = '';
+      }
+      if (applyBmiButton) {
+        applyBmiButton.classList.add('d-none');
+      }
+      suggestedObesityValue = null;
+    }
+
+    document.querySelectorAll('.risk-slider').forEach((slider) => {
+      updateSliderDisplay(slider);
+      slider.addEventListener('input', () => updateSliderDisplay(slider));
+    });
+
+    form.addEventListener('reset', () => {
+      limpiarResultado();
+      setTimeout(() => {
+        document.querySelectorAll('.risk-slider').forEach((slider) => {
+          updateSliderDisplay(slider);
+        });
+      }, 0);
+    });
+
+    function classifyBmi(bmi) {
+      if (bmi < 18.5) {
+        return { category: 'Bajo peso', suggestion: 1, label: 'Muy baja o ausente', explanation: 'IMC menor de 18.5. Para el modelo, se sugiere valor 1 porque no corresponde a obesidad.' };
+      }
+      if (bmi < 25) {
+        return { category: 'Peso saludable', suggestion: 1, label: 'Muy baja o ausente', explanation: 'IMC entre 18.5 y menor de 25. Para el modelo, se sugiere valor 1.' };
+      }
+      if (bmi < 27.5) {
+        return { category: 'Sobrepeso leve', suggestion: 2, label: 'Baja', explanation: 'IMC entre 25 y 27.4 aproximadamente. Para el modelo, se sugiere valor 2.' };
+      }
+      if (bmi < 30) {
+        return { category: 'Sobrepeso alto', suggestion: 3, label: 'Leve', explanation: 'IMC entre 27.5 y 29.9 aproximadamente. Para el modelo, se sugiere valor 3.' };
+      }
+      if (bmi < 35) {
+        return { category: 'Obesidad clase I', suggestion: 4, label: 'Moderada', explanation: 'IMC entre 30 y 34.9. Para el modelo, se sugiere valor 4.' };
+      }
+      if (bmi < 40) {
+        return { category: 'Obesidad clase II', suggestion: 5, label: 'Alta', explanation: 'IMC entre 35 y 39.9. Para el modelo, se sugiere valor 5.' };
+      }
+      return { category: 'Obesidad clase III', suggestion: 6, label: 'Muy alta', explanation: 'IMC igual o mayor de 40. Para el modelo, se sugiere valor 6. El valor 7 se reserva para obesidad muy severa o con complicaciones asociadas.' };
+    }
+
+    function updateObesitySlider(value) {
+      const obesitySlider = document.getElementById('Obesity');
+      if (!obesitySlider) return;
+      obesitySlider.value = String(value);
+      updateSliderDisplay(obesitySlider);
+    }
+
+    if (calculateBmiButton) {
+      calculateBmiButton.addEventListener('click', () => {
+        const weight = parseFloat(bmiWeight.value);
+        const heightCm = parseFloat(bmiHeight.value);
+
+        if (!weight || !heightCm || weight <= 0 || heightCm <= 0) {
+          bmiResult.classList.remove('d-none');
+          bmiResult.innerHTML = '<strong>Ingrese valores válidos.</strong> El peso debe estar en kg y la talla en cm.';
+          applyBmiButton.classList.add('d-none');
+          suggestedObesityValue = null;
+          return;
+        }
+
+        const heightM = heightCm / 100;
+        const bmi = weight / (heightM * heightM);
+        const result = classifyBmi(bmi);
+        suggestedObesityValue = result.suggestion;
+        bmiResult.classList.remove('d-none');
+        applyBmiButton.classList.remove('d-none');
+        bmiResult.innerHTML = `
+          <strong>IMC calculado:</strong> ${bmi.toFixed(1)}<br>
+          <strong>Categoría orientativa:</strong> ${result.category}<br>
+          <strong>Sugerencia para obesidad:</strong> ${result.suggestion} - ${result.label}<br>
+          <span>${result.explanation}</span>
+        `;
+      });
+    }
+
+    if (applyBmiButton) {
+      applyBmiButton.addEventListener('click', () => {
+        if (suggestedObesityValue !== null) {
+          updateObesitySlider(suggestedObesityValue);
+        }
+      });
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      limpiarResultado();
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+      try {
+        const response = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'No se pudo realizar la predicción.');
+        }
+
+        riskLevel.textContent = `${data.risk_level_es} (${data.risk_level})`;
+        riskLevel.classList.add(`risk-${String(data.risk_level).toLowerCase()}`);
+        note.textContent = data.note || '';
+
+        if (data.input_descriptions) {
+          Object.entries(data.input_descriptions).forEach(([feature, item]) => {
+            const card = document.createElement('div');
+            card.className = 'col-md-6';
+            const imgSrc = featureImages[feature] || '';
+            card.innerHTML = `
+              <div class="input-card h-100">
+                <div class="input-card-top">
+                  <img src="${imgSrc}" alt="${item.label}" class="input-card-icon">
+                  <div>
+                    <div class="input-label">${item.label}</div>
+                    <div class="input-value">Valor ${item.value}</div>
+                    <div class="input-category">${item.category}</div>
+                  </div>
+                </div>
+                <div class="input-example">${item.example || ''}</div>
+              </div>
+            `;
+            inputSummary.appendChild(card);
+          });
+        }
+
+        if (data.report) {
+          reportBox.classList.remove('d-none');
+          generalMessage.textContent = data.report.mensaje_general || '';
+          specificRecommendations.innerHTML = '';
+          if (Array.isArray(data.report.recomendaciones_especificas)) {
+            data.report.recomendaciones_especificas.forEach((recommendation) => {
+              const li = document.createElement('li');
+              li.textContent = recommendation;
+              specificRecommendations.appendChild(li);
+            });
+          }
+          reportWarning.textContent = data.report.advertencia || '';
+        }
+
+        if (data.probabilities) {
+          Object.entries(data.probabilities).forEach(([label, value]) => {
+            const percent = (value * 100).toFixed(2);
+            const row = document.createElement('div');
+            row.className = 'probability-row';
+            row.innerHTML = `
+              <div class="probability-labels">
+                <span>${label}</span>
+                <strong>${percent}%</strong>
+              </div>
+              <div class="progress probability-progress" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-bar" style="width:${percent}%"></div>
+              </div>
+            `;
+            probabilities.appendChild(row);
+          });
+        }
+
+        resultBox.classList.remove('d-none');
+        resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (error) {
+        errorBox.querySelector('.alert').textContent = error.message;
+        errorBox.classList.remove('d-none');
+      }
+    });
+  </script>
+</body>
+</html>
